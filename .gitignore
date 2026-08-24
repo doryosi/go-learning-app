@@ -1,0 +1,11 @@
+# Go build and test output
+/bin/
+*.out
+
+# Local configuration
+.env
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
