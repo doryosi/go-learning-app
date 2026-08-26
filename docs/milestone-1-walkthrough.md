@@ -230,6 +230,168 @@ whether it can safely receive traffic. Their behavior is currently similar
 because there are no external dependencies. Readiness can become stricter when
 the application gains required services.
 
+### Health-check client, line by line
+
+The health-check client in `cmd/healthcheck/main.go` is a separate, small Go
+program. Docker periodically runs it to decide whether the API container is
+healthy:
+
+```text
+Docker
+  → runs /healthcheck
+  → healthcheck requests GET /healthz
+  → exits with success or failure
+  → Docker marks the API healthy or unhealthy
+```
+
+Docker supplies the executable and URL through this Dockerfile instruction:
+
+```dockerfile
+CMD ["/healthcheck", "http://127.0.0.1:8080/healthz"]
+```
+
+The Go program receives them in `os.Args`:
+
+```text
+os.Args[0] = /healthcheck
+os.Args[1] = http://127.0.0.1:8080/healthz
+```
+
+#### Validate the command-line arguments
+
+```go
+if len(os.Args) != 2 {
+    fmt.Fprintln(os.Stderr, "usage: healthcheck URL")
+    os.Exit(2)
+}
+```
+
+`os.Args` contains the program name followed by its arguments. The program
+requires exactly one URL, so the total length must be two. If the URL is
+missing, it writes usage information to standard error and exits with code 2,
+which conventionally indicates incorrect command usage.
+
+#### Create a time-limited HTTP client
+
+```go
+client := http.Client{
+    Timeout: 1500 * time.Millisecond,
+}
+```
+
+Without a timeout, a network problem could leave the health check waiting too
+long. The client's 1.5-second limit is deliberately shorter than Docker's
+two-second health-check timeout. This gives the program time to report its own
+error before Docker forcibly ends it.
+
+#### Send the health request
+
+```go
+response, err := client.Get(os.Args[1])
+```
+
+`client.Get` sends an HTTP `GET` request to the URL in the first command-line
+argument. Go functions can return multiple values: `response` holds the HTTP
+response, while `err` reports connection, timeout, malformed URL, or protocol
+failures.
+
+```go
+if err != nil {
+    fmt.Fprintln(os.Stderr, err)
+    os.Exit(1)
+}
+```
+
+If the API is not listening, the connection is refused, or the request times
+out, the program prints the error and exits with code 1. Docker interprets the
+nonzero exit code as a failed health check.
+
+The address `127.0.0.1` refers to the same container in which the health-check
+program is running:
+
+```text
+API container
+├── /api
+└── /healthcheck
+```
+
+The request stays inside the container and does not travel through the port
+published on the developer's machine.
+
+#### Release the response resources
+
+```go
+defer response.Body.Close()
+```
+
+An HTTP response owns resources associated with its body and connection. Even
+though the health check does not need the JSON body, it should close the body.
+`defer` schedules the close operation for when `main` finishes.
+
+#### Interpret the HTTP status
+
+```go
+if response.StatusCode < http.StatusOK ||
+    response.StatusCode >= http.StatusMultipleChoices {
+    fmt.Fprintf(os.Stderr, "unhealthy HTTP status: %s\n", response.Status)
+    os.Exit(1)
+}
+```
+
+The standard-library constants represent status codes 200 and 300. The
+condition therefore accepts the range `200 <= status < 300` and rejects client
+and server failures such as 404, 500, and 503. An unsuccessful status is
+reported to standard error and produces exit code 1.
+
+There is no explicit `os.Exit(0)` at the end. Returning normally from `main`
+automatically exits with code 0. The complete exit-code contract is:
+
+| Exit code | Meaning |
+|---:|---|
+| `0` | The endpoint returned a successful HTTP status |
+| `1` | The request failed, timed out, or returned an unhealthy status |
+| `2` | The health-check command was invoked incorrectly |
+
+Docker uses repeated results to move the container between `starting`,
+`healthy`, and `unhealthy` states.
+
+#### Why use a Go client instead of curl?
+
+The runtime image starts with `FROM scratch`, so it contains no shell, `curl`,
+or `wget`. Adding a Linux distribution and command-line HTTP client would make
+the image larger, add packages requiring security updates, and increase its
+attack surface. The small statically compiled Go program supplies exactly the
+behavior the container needs.
+
+The endpoint and client have separate responsibilities:
+
+```text
+API health endpoint                  Health-check client
+GET /healthz                         /healthcheck executable
+Answers an HTTP request              Sends the HTTP request
+Returns JSON                         Returns a process exit code
+```
+
+The client currently checks the status code rather than parsing the endpoint's
+JSON. The URL is passed as an argument rather than hard-coded, so the same
+binary can check another endpoint when needed.
+
+#### Liveness and readiness
+
+The Docker image currently checks `/healthz`, which answers whether the process
+is alive. As dependencies are introduced, `/readyz` can answer whether the
+instance can safely receive traffic. A later Kubernetes deployment can use the
+two endpoints independently:
+
+```text
+Docker health check         → /healthz
+Kubernetes liveness probe   → /healthz
+Kubernetes readiness probe  → /readyz
+```
+
+This distinction matters because restarting the process is not always the
+correct response to a temporary database or queue problem.
+
 ## Reading JSON safely
 
 `decodeJSON` applies the same parsing rules to every JSON request:
