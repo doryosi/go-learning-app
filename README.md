@@ -7,6 +7,8 @@ For a detailed explanation of the project structure and the Go concepts used,
 read the [Milestone 1 walkthrough](docs/milestone-1-walkthrough.md).
 For an explanation of the Dockerfile, Compose environment, health check, and
 worker image, read the [containerization walkthrough](docs/milestone-1-containerization.md).
+The AWS networking work is explained in the
+[milestone 2 networking walkthrough](docs/milestone-2-networking.md).
 
 ## Milestone 1: local Go service
 
@@ -116,3 +118,16 @@ There is intentionally no database, cloud SDK, Terraform, or web framework yet.
 Application state and sessions are in memory and reset whenever the API
 container restarts; later milestones replace these boundaries with managed
 services.
+
+## Milestone 2: AWS network foundation
+
+The first AWS slice lives in `infra/terraform/network`. It defines a VPC,
+public and private subnets in multiple Availability Zones, route tables, an
+Internet Gateway, optional cost-aware NAT Gateways, and security groups for the
+future ALB and private application compute.
+
+The default NAT mode is `none`, so merely using the example configuration does
+not request a charged NAT Gateway. Terraform does not create anything until an
+authenticated user deliberately runs `terraform apply`. Start with the
+[network module guide](infra/terraform/network/README.md), inspect the plan,
+and destroy experiments promptly.

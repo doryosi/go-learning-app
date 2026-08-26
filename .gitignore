@@ -9,3 +9,16 @@
 .DS_Store
 .idea/
 .vscode/
+
+# Terraform working data and state (state can contain sensitive values)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

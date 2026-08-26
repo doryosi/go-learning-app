@@ -1,0 +1,28 @@
+aws_region   = "eu-west-1"
+project_name = "go-saas-learning-lab"
+environment  = "lab"
+
+vpc_cidr                = "10.0.0.0/16"
+availability_zone_count = 2
+
+public_subnet_cidrs = [
+  "10.0.0.0/24",
+  "10.0.1.0/24",
+  "10.0.2.0/24",
+]
+
+private_subnet_cidrs = [
+  "10.0.10.0/24",
+  "10.0.11.0/24",
+  "10.0.12.0/24",
+]
+
+# NAT gateways incur hourly and data-processing charges. Keep this at "none"
+# while building the network foundation; enable egress when deploying EC2.
+nat_gateway_mode = "none"
+
+app_port = 8080
+
+additional_tags = {
+  Owner = "Dor Sinay"
+}
