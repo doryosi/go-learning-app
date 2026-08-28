@@ -244,7 +244,11 @@ func (a *API) logRequests(next http.Handler) http.Handler {
 		started := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(sw, r)
-		a.logger.Info("http request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "duration", time.Since(started))
+		level := slog.LevelInfo
+		if r.URL.Path == "/healthz" {
+			level = slog.LevelDebug
+		}
+		a.logger.Log(r.Context(), level, "http request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "duration", time.Since(started))
 	})
 }
 

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -110,5 +111,28 @@ func TestUnknownRoute(t *testing.T) {
 
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+}
+
+func TestHealthRequestLoggingLevel(t *testing.T) {
+	var logs bytes.Buffer
+	infoLogger := slog.New(slog.NewTextHandler(&logs, nil))
+	handler := NewHandlerWithLogger(infoLogger)
+
+	request(t, handler, http.MethodGet, "/healthz", "", "")
+	if logs.Len() != 0 {
+		t.Fatalf("health check was logged at the default info level: %s", logs.String())
+	}
+
+	request(t, handler, http.MethodGet, "/readyz", "", "")
+	if got := logs.String(); !strings.Contains(got, "level=INFO") || !strings.Contains(got, "path=/readyz") {
+		t.Fatalf("readiness request log = %q, want INFO log for /readyz", got)
+	}
+
+	logs.Reset()
+	debugLogger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	request(t, NewHandlerWithLogger(debugLogger), http.MethodGet, "/healthz", "", "")
+	if got := logs.String(); !strings.Contains(got, "level=DEBUG") || !strings.Contains(got, "path=/healthz") {
+		t.Fatalf("health request log = %q, want DEBUG log for /healthz", got)
 	}
 }
