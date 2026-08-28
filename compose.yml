@@ -1,5 +1,6 @@
 services:
   api:
+    image: go-learning-app-api:${IMAGE_TAG:-dev}
     build:
       context: .
       target: api
@@ -10,6 +11,7 @@ services:
     init: true
 
   worker:
+    image: go-learning-app-worker:${IMAGE_TAG:-dev}
     build:
       context: .
       target: worker

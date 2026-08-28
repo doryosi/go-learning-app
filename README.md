@@ -7,6 +7,8 @@ For a detailed explanation of the project structure and the Go concepts used,
 read the [Milestone 1 walkthrough](docs/milestone-1-walkthrough.md).
 For an explanation of the Dockerfile, Compose environment, health check, and
 worker image, read the [containerization walkthrough](docs/milestone-1-containerization.md).
+For the repeatable image build, local server, verification, and cleanup flow,
+read the [milestone 1.5 local-container walkthrough](docs/milestone-1.5-local-containers.md).
 The AWS networking work is explained in the
 [milestone 2 networking walkthrough](docs/milestone-2-networking.md).
 
@@ -85,6 +87,16 @@ the containers with:
 
 ```sh
 make docker-down
+```
+
+For explicit versioned image tags and a detached local server, run:
+
+```sh
+IMAGE_TAG=v0.1.0 docker compose up --build --detach
+docker compose ps
+curl -i http://localhost:8080/healthz
+curl -i http://localhost:8080/readyz
+docker compose down
 ```
 
 The worker intentionally does not consume the API's in-memory jobs. Separate
