@@ -27,15 +27,140 @@ Compose performs the same target selection. `IMAGE_TAG` controls the tag for
 both images; it defaults to `dev` when omitted:
 
 ```sh
-IMAGE_TAG=v0.1.0 docker compose build
+export IMAGE_TAG=v0.1.0
+export VCS_REVISION="$(git rev-parse HEAD)"
+export BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+docker compose build
 ```
+
+These values become standard OCI image labels. The version is convenient for
+humans, while the full Git revision identifies the exact committed source used
+for the build. Build from a clean working tree so that the revision describes
+all source included in the image. DOR-25 will calculate these inputs through a
+Taskfile instead of requiring manual exports.
+
+Inspect the provenance after building:
+
+```sh
+docker image inspect go-learning-app-api:v0.1.0 \
+  --format '{{json .Config.Labels}}'
+
+docker image inspect go-learning-app-worker:v0.1.0 \
+  --format '{{json .Config.Labels}}'
+```
+
+Both images expose `org.opencontainers.image.version`, `revision`, `created`,
+and `source`. They use different `title` labels because they are independently
+deployable applications.
+
+## Tags, digests, and Git commits
+
+An image tag, Docker digest, and Git commit identify different things:
+
+| Identifier | Example | Meaning |
+|---|---|---|
+| Image tag | `v0.1.2` | A human-friendly, mutable name for an image |
+| Image ID or repository digest | `sha256:b1f11e...` | A content-addressed identity for a built image |
+| Git commit | `76d2c7f...` | An immutable snapshot of the source repository |
+
+A tag can be moved to a different image, so it is not sufficient proof of the
+image contents. A digest changes when the represented image manifest changes
+and is the immutable reference used by container registries and deployment
+systems. After the images are pushed to ECR, they can be selected by digest:
+
+```text
+123456789012.dkr.ecr.eu-west-1.amazonaws.com/go-api@sha256:...
+```
+
+The Docker digest is not the Git commit hash. Docker identifies built image
+content, while Git identifies source content. BuildKit provenance and manifest
+metadata can also make top-level image digests differ between builds even when
+the runtime filesystem is unchanged. We therefore record the Git commit as an
+explicit OCI label rather than trying to infer it from the Docker digest.
+
+Show local tags, digests, IDs, creation times, and sizes with:
+
+```sh
+docker image ls 'go-learning-app-*' --digests
+```
+
+Show the exact image selected by each running container with:
+
+```sh
+docker inspect \
+  go-learning-app-api-1 \
+  go-learning-app-worker-1 \
+  --format '{{.Name}} -> {{.Config.Image}} -> {{.Image}}'
+```
+
+## Coupling an image to its source commit
+
+The coupling is implemented explicitly in three steps.
+
+First, each final Dockerfile stage declares build arguments with safe fallback
+values and stores them as standard OCI labels:
+
+```dockerfile
+ARG IMAGE_VERSION=dev
+ARG VCS_REVISION=unknown
+ARG BUILD_DATE=unknown
+ARG SOURCE_URL=https://github.com/doryosi/go-learning-app
+
+LABEL org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REVISION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="${SOURCE_URL}"
+```
+
+`unknown` is an honest fallback for informal builds that do not supply
+provenance. A Dockerfile should not depend on `.git`: the directory is excluded
+from the build context, builds may start from source archives, and the build
+environment—not the image—knows which revision it is building.
+
+Second, `compose.yml` maps shell variables into Docker build arguments for both
+the API and worker targets:
+
+```yaml
+args:
+  IMAGE_VERSION: ${IMAGE_TAG:-dev}
+  VCS_REVISION: ${VCS_REVISION:-unknown}
+  BUILD_DATE: ${BUILD_DATE:-unknown}
+  SOURCE_URL: ${SOURCE_URL:-https://github.com/doryosi/go-learning-app}
+```
+
+Third, commit all source changes before building, verify that the working tree
+is clean, and supply the exact commit and build time:
+
+```sh
+git status --short
+
+export IMAGE_TAG=v0.1.2
+export VCS_REVISION="$(git rev-parse HEAD)"
+export BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+docker compose build
+```
+
+Finally, compare the embedded revision with Git:
+
+```sh
+git rev-parse HEAD
+
+docker image inspect go-learning-app-api:v0.1.2 \
+  --format 'version={{index .Config.Labels "org.opencontainers.image.version"}} revision={{index .Config.Labels "org.opencontainers.image.revision"}} created={{index .Config.Labels "org.opencontainers.image.created"}} source={{index .Config.Labels "org.opencontainers.image.source"}}'
+```
+
+The two revision values should match. If the working tree contains uncommitted
+source changes, the label cannot fully describe the image, which is why clean,
+committed builds are important. DOR-25 will automate this workflow, and the
+later GitHub Actions pipeline will obtain the revision directly from CI.
 
 ## Start the local environment
 
 Start both services in the background:
 
 ```sh
-IMAGE_TAG=v0.1.0 docker compose up --build --detach
+docker compose up --build --detach
 ```
 
 The API publishes container port 8080 on host port 8080. The worker publishes
@@ -82,7 +207,7 @@ container is recreated.
 Recreate both services from the selected image version:
 
 ```sh
-IMAGE_TAG=v0.1.0 docker compose up --detach --force-recreate
+docker compose up --detach --force-recreate
 ```
 
 Stop and remove the containers and Compose network:

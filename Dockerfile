@@ -23,6 +23,20 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
 
 FROM scratch AS api
 
+ARG IMAGE_VERSION=dev
+
+ARG VCS_REVISION=unknown
+
+ARG BUILD_DATE=unknown
+
+ARG SOURCE_URL=https://github.com/doryosi/go-learning-app
+
+LABEL org.opencontainers.image.title="go-learning-app-api" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REVISION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="${SOURCE_URL}"
+
 COPY --from=build /out/api /api
 
 COPY --from=build /out/healthcheck /healthcheck
@@ -37,6 +51,20 @@ HEALTHCHECK --interval=10s --timeout=2s --start-period=3s --retries=3 \
 ENTRYPOINT ["/api"]
 
 FROM scratch AS worker
+
+ARG IMAGE_VERSION=dev
+
+ARG VCS_REVISION=unknown
+
+ARG BUILD_DATE=unknown
+
+ARG SOURCE_URL=https://github.com/doryosi/go-learning-app
+
+LABEL org.opencontainers.image.title="go-learning-app-worker" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REVISION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="${SOURCE_URL}"
 
 COPY --from=build /out/worker /worker
 

@@ -4,6 +4,11 @@ services:
     build:
       context: .
       target: api
+      args:
+        IMAGE_VERSION: ${IMAGE_TAG:-dev}
+        VCS_REVISION: ${VCS_REVISION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        SOURCE_URL: ${SOURCE_URL:-https://github.com/doryosi/go-learning-app}
     environment:
       PORT: "8080"
     ports:
@@ -15,4 +20,9 @@ services:
     build:
       context: .
       target: worker
+      args:
+        IMAGE_VERSION: ${IMAGE_TAG:-dev}
+        VCS_REVISION: ${VCS_REVISION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        SOURCE_URL: ${SOURCE_URL:-https://github.com/doryosi/go-learning-app}
     init: true
