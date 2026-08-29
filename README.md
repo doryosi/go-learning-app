@@ -11,6 +11,8 @@ For the repeatable image build, local server, verification, and cleanup flow,
 read the [milestone 1.5 local-container walkthrough](docs/milestone-1.5-local-containers.md).
 The AWS networking work is explained in the
 [milestone 2 networking walkthrough](docs/milestone-2-networking.md).
+The ECR registry configuration is documented in the
+[ECR Terraform module guide](infra/terraform/ecr/README.md).
 
 ## Milestone 1: local Go service
 
@@ -123,7 +125,8 @@ the compiler accepts.
 
 Task is the single command runner for the project. It also exposes the existing
 Terraform workflow as `terraform:init`, `terraform:fmt`, `terraform:validate`,
-and `terraform:plan`.
+and `terraform:plan`. The ECR root module uses the corresponding
+`terraform:ecr:*` tasks.
 
 ## What to notice
 
