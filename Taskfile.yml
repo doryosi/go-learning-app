@@ -2,6 +2,7 @@ version: "3"
 
 vars:
   BIN_DIR: bin
+  ECR_TF_DIR: infra/terraform/ecr
   TF_DIR: infra/terraform/network
   IMAGE_TAG: '{{default "dev" .IMAGE_TAG}}'
   SOURCE_URL: '{{default "https://github.com/doryosi/go-learning-app" .SOURCE_URL}}'
@@ -135,3 +136,23 @@ tasks:
     desc: Preview changes to the Terraform network infrastructure
     cmds:
       - terraform -chdir={{.TF_DIR}} plan
+
+  terraform:ecr:fmt:
+    desc: Format the Terraform ECR module
+    cmds:
+      - terraform -chdir={{.ECR_TF_DIR}} fmt -recursive
+
+  terraform:ecr:init:
+    desc: Initialize the Terraform ECR module
+    cmds:
+      - terraform -chdir={{.ECR_TF_DIR}} init
+
+  terraform:ecr:validate:
+    desc: Validate the Terraform ECR module
+    cmds:
+      - terraform -chdir={{.ECR_TF_DIR}} validate
+
+  terraform:ecr:plan:
+    desc: Preview changes to the ECR repositories
+    cmds:
+      - terraform -chdir={{.ECR_TF_DIR}} plan

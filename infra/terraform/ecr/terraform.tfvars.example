@@ -1,0 +1,14 @@
+aws_region   = "eu-west-1"
+project_name = "go-saas-learning-lab"
+environment  = "lab"
+
+image_retention_count  = 10
+untagged_retention_days = 1
+
+# Keep false so Terraform refuses to delete repositories that still contain
+# images. Change only for deliberate, reviewed lab cleanup.
+force_delete = false
+
+additional_tags = {
+  Owner = "Dor Sinay"
+}
