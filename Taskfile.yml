@@ -1,0 +1,137 @@
+version: "3"
+
+vars:
+  BIN_DIR: bin
+  TF_DIR: infra/terraform/network
+  IMAGE_TAG: '{{default "dev" .IMAGE_TAG}}'
+  SOURCE_URL: '{{default "https://github.com/doryosi/go-learning-app" .SOURCE_URL}}'
+  VCS_REVISION:
+    sh: git rev-parse HEAD
+  BUILD_DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+
+tasks:
+  default:
+    desc: List the available development tasks
+    cmds:
+      - task --list
+
+  go:build:
+    desc: Build the API, worker, and health-check binaries
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -o {{.BIN_DIR}}/api ./cmd/api
+      - go build -o {{.BIN_DIR}}/worker ./cmd/worker
+      - go build -o {{.BIN_DIR}}/healthcheck ./cmd/healthcheck
+
+  go:test:
+    desc: Run all Go tests
+    cmds:
+      - go test ./...
+
+  go:fmt:
+    desc: Format all Go source files
+    cmds:
+      - gofmt -w .
+
+  go:vet:
+    desc: Check Go code for suspicious constructs
+    cmds:
+      - go vet ./...
+
+  go:check:
+    desc: Run the Go tests and static checks
+    cmds:
+      - task: go:test
+      - task: go:vet
+
+  go:run:api:
+    desc: Run the API directly on the host
+    cmds:
+      - go run ./cmd/api
+
+  go:run:worker:
+    desc: Run the worker directly on the host
+    cmds:
+      - go run ./cmd/worker
+
+  go:clean:
+    desc: Remove locally built Go binaries
+    cmds:
+      - rm -rf ./{{.BIN_DIR}}
+
+  docker:build:
+    desc: Build both versioned container images with Git provenance
+    cmds:
+      - task: docker:build:api
+      - task: docker:build:worker
+
+  docker:build:api:
+    desc: Build the versioned API image with Git provenance
+    cmds:
+      - docker compose build api
+    env: &image_environment
+      IMAGE_TAG: "{{.IMAGE_TAG}}"
+      VCS_REVISION: "{{.VCS_REVISION}}"
+      BUILD_DATE: "{{.BUILD_DATE}}"
+      SOURCE_URL: "{{.SOURCE_URL}}"
+
+  docker:build:worker:
+    desc: Build the versioned worker image with Git provenance
+    cmds:
+      - docker compose build worker
+    env: *image_environment
+
+  docker:up:
+    desc: Build and start the API and worker in the background
+    deps:
+      - docker:build
+    cmds:
+      - docker compose up --detach
+    env: *image_environment
+
+  docker:down:
+    desc: Stop and remove the local Compose environment
+    cmds:
+      - docker compose down
+    env: *image_environment
+
+  docker:status:
+    desc: Show the local containers and their health
+    cmds:
+      - docker compose ps
+    env: *image_environment
+
+  docker:logs:
+    desc: Show container logs; pass a service after -- to filter them
+    cmds:
+      - docker compose logs {{.CLI_ARGS}}
+    env: *image_environment
+
+  docker:recreate:
+    desc: Rebuild and force-recreate the local containers
+    deps:
+      - docker:build
+    cmds:
+      - docker compose up --detach --force-recreate
+    env: *image_environment
+
+  terraform:fmt:
+    desc: Format the Terraform network module
+    cmds:
+      - terraform -chdir={{.TF_DIR}} fmt -recursive
+
+  terraform:init:
+    desc: Initialize the Terraform network module
+    cmds:
+      - terraform -chdir={{.TF_DIR}} init
+
+  terraform:validate:
+    desc: Validate the Terraform network module
+    cmds:
+      - terraform -chdir={{.TF_DIR}} validate
+
+  terraform:plan:
+    desc: Preview changes to the Terraform network infrastructure
+    cmds:
+      - terraform -chdir={{.TF_DIR}} plan

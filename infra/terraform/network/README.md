@@ -82,19 +82,19 @@ cp terraform.tfvars.example terraform.tfvars
 Then initialize and validate:
 
 ```sh
-make terraform-init
-make terraform-fmt
-make terraform-validate
+task terraform:init
+task terraform:fmt
+task terraform:validate
 ```
 
 Review a plan before creating anything:
 
 ```sh
-make terraform-plan
+task terraform:plan
 ```
 
 Running `terraform apply` creates billable AWS resources when NAT is enabled.
-It is intentionally not wrapped in a Make target so applying remains a
+It is intentionally not wrapped in a Taskfile task so applying remains a
 deliberate action. When an experiment is finished, run `terraform destroy` and
 confirm in AWS that the resources are gone.
 
