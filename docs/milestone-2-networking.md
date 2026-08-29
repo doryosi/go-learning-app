@@ -178,16 +178,16 @@ without duplicating or rediscovering network decisions.
 Initialize and validate without creating AWS resources:
 
 ```sh
-make terraform-init
-make terraform-fmt
-make terraform-validate
+task terraform:init
+task terraform:fmt
+task terraform:validate
 ```
 
 After configuring an authenticated AWS identity, inspect it and create a plan:
 
 ```sh
 aws sts get-caller-identity
-make terraform-plan
+task terraform:plan
 ```
 
 Read every planned resource and cost implication before applying. State and

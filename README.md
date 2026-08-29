@@ -29,18 +29,24 @@ The current slice provides:
 These operational endpoints look small, but later milestones will reuse them for
 Docker health checks, ALB target health checks, and Kubernetes probes.
 
-### Prerequisite
+### Prerequisites
 
-Install Go 1.22 or newer, then confirm it is available:
+Install Go 1.22 or newer and [go-task](https://taskfile.dev/). On macOS,
+go-task can be installed from its official Homebrew tap:
 
 ```sh
+brew install go-task/tap/go-task
+
 go version
+task --version
 ```
+
+Run `task` without arguments to see every available development command.
 
 ### Run it
 
 ```sh
-make run
+task go:run:api
 ```
 
 In a second terminal:
@@ -66,7 +72,7 @@ curl -sS -X POST http://localhost:8080/login \
 Try configuration without changing code:
 
 ```sh
-PORT=9090 make run
+PORT=9090 task go:run:api
 ```
 
 Stop the server with `Ctrl+C`; the log should show that it received the shutdown
@@ -77,7 +83,7 @@ signal and let in-flight requests finish before exiting.
 With Docker Engine or Docker Desktop running:
 
 ```sh
-make docker-up
+IMAGE_TAG=v0.1.0 task docker:up
 ```
 
 This builds two small images from the multi-stage `Dockerfile`: `api` exposes
@@ -86,17 +92,19 @@ background-process lifecycle. Both run as an unprivileged user. Stop and remove
 the containers with:
 
 ```sh
-make docker-down
+IMAGE_TAG=v0.1.0 task docker:down
 ```
 
-For explicit versioned image tags and a detached local server, run:
+Task calculates the full Git revision and UTC build time and stores them in the
+images' OCI labels. Common container commands are:
 
 ```sh
-IMAGE_TAG=v0.1.0 docker compose up --build --detach
-docker compose ps
+IMAGE_TAG=v0.1.0 task docker:build
+IMAGE_TAG=v0.1.0 task docker:status
+IMAGE_TAG=v0.1.0 task docker:logs -- api
 curl -i http://localhost:8080/healthz
 curl -i http://localhost:8080/readyz
-docker compose down
+IMAGE_TAG=v0.1.0 task docker:down
 ```
 
 The worker intentionally does not consume the API's in-memory jobs. Separate
@@ -106,12 +114,16 @@ with SQS in milestone 3.
 ### Verify it
 
 ```sh
-make check
+task go:check
 ```
 
 `go test` uses `httptest`, which calls the HTTP handler directly. This keeps the
 test fast and deterministic. `go vet` catches common correctness mistakes that
 the compiler accepts.
+
+Task is the single command runner for the project. It also exposes the existing
+Terraform workflow as `terraform:init`, `terraform:fmt`, `terraform:validate`,
+and `terraform:plan`.
 
 ## What to notice
 

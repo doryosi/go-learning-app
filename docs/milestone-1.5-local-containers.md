@@ -36,8 +36,8 @@ docker compose build
 These values become standard OCI image labels. The version is convenient for
 humans, while the full Git revision identifies the exact committed source used
 for the build. Build from a clean working tree so that the revision describes
-all source included in the image. DOR-25 will calculate these inputs through a
-Taskfile instead of requiring manual exports.
+all source included in the image. The Taskfile added in DOR-25 calculates the
+revision and build time automatically.
 
 Inspect the provenance after building:
 
@@ -152,7 +152,7 @@ docker image inspect go-learning-app-api:v0.1.2 \
 
 The two revision values should match. If the working tree contains uncommitted
 source changes, the label cannot fully describe the image, which is why clean,
-committed builds are important. DOR-25 will automate this workflow, and the
+committed builds are important. DOR-25 automates this workflow, and the
 later GitHub Actions pipeline will obtain the revision directly from CI.
 
 ## Start the local environment
@@ -222,6 +222,54 @@ Remove the locally built versioned images when they are no longer needed:
 docker image rm go-learning-app-api:v0.1.0 go-learning-app-worker:v0.1.0
 ```
 
-The next local-development issue wraps these commands in a Taskfile. A later
-AWS issue will tag the same two image targets with ECR repository addresses and
-push them to AWS.
+## Taskfile workflow
+
+Install go-task on macOS from its official Homebrew tap:
+
+```sh
+brew install go-task/tap/go-task
+```
+
+Run `task` to get a discoverable list of commands. The main Go workflow is:
+
+```sh
+task go:build
+task go:fmt
+task go:check
+task go:run:api
+task go:run:worker
+task go:clean
+```
+
+The build task writes the API, worker, and health-check binaries under `bin/`.
+That directory contains generated output and is ignored by Git. The two run
+tasks are intentionally long-running and stop when you press `Ctrl+C`.
+
+The main Docker workflow is:
+
+```sh
+IMAGE_TAG=v0.1.3 task docker:build
+IMAGE_TAG=v0.1.3 task docker:up
+IMAGE_TAG=v0.1.3 task docker:status
+IMAGE_TAG=v0.1.3 task docker:logs -- api
+IMAGE_TAG=v0.1.3 task docker:recreate
+IMAGE_TAG=v0.1.3 task docker:down
+```
+
+`IMAGE_TAG` defaults to `dev`, but an explicit version is preferable when the
+image will be inspected or shared. `VCS_REVISION` comes from `git rev-parse
+HEAD`, `BUILD_DATE` is generated in UTC, and `SOURCE_URL` defaults to this
+GitHub repository. A caller can still override any of these variables.
+
+Task names use namespaces such as `go:*` and `docker:*`, which keeps the command
+list readable as the project grows. Composite tasks call smaller tasks rather
+than duplicating their shell commands: `go:check` runs tests and vetting,
+`docker:build` builds both image targets, and the start/recreate tasks depend on
+the common image build.
+
+Task is the single command runner for Go, Docker, and Terraform workflows. The
+older Makefile was removed after its Terraform targets were migrated to
+`terraform:init`, `terraform:fmt`, `terraform:validate`, and `terraform:plan`.
+
+A later AWS issue will tag the same two image targets with ECR repository
+addresses and push them to AWS.

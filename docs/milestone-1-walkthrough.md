@@ -16,7 +16,7 @@ go-learning-app/
 ├── internal/httpapi/handler.go      Routes and application behavior
 ├── internal/httpapi/handler_test.go HTTP behavior tests
 ├── go.mod                           Go module definition
-├── Makefile                         Development commands
+├── Taskfile.yml                     Development commands
 └── README.md                        Setup and usage
 ```
 
@@ -492,7 +492,7 @@ The tests demonstrate common Go patterns:
 Run the complete verification suite with:
 
 ```sh
-make check
+task go:check
 go test -race ./...
 ```
 

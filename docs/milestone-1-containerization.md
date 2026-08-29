@@ -276,33 +276,21 @@ test from hanging forever if shutdown is broken.
 This verifies that Docker and Kubernetes can stop the worker gracefully rather
 than killing it forcibly.
 
-## Makefile commands
+## Taskfile commands
 
-The Makefile uses a configurable Compose command:
-
-```make
-COMPOSE ?= docker-compose
-```
-
-`?=` assigns the default only when the caller has not supplied another value. A
-system using the plugin form can run:
+The Taskfile wraps the common container lifecycle commands using Docker
+Compose's current CLI plugin form:
 
 ```sh
-make docker-up COMPOSE="docker compose"
-```
-
-Available container commands are:
-
-```sh
-make docker-build  # Build both images
-make docker-up     # Build and start both services
-make docker-down   # Stop and remove containers and their network
+task docker:build   # Build both images
+task docker:up      # Build and start both services
+task docker:down    # Stop and remove containers and their network
 ```
 
 The worker can also be run directly with:
 
 ```sh
-make worker
+task go:run:worker
 ```
 
 ## Verification results
