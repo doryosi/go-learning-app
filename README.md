@@ -13,6 +13,8 @@ The AWS networking work is explained in the
 [milestone 2 networking walkthrough](docs/milestone-2-networking.md).
 The ECR registry configuration is documented in the
 [ECR Terraform module guide](infra/terraform/ecr/README.md).
+The manual versioned image release process is explained in the
+[ECR publishing walkthrough](docs/milestone-2-ecr-publishing.md).
 
 ## Milestone 1: local Go service
 
@@ -127,6 +129,15 @@ Task is the single command runner for the project. It also exposes the existing
 Terraform workflow as `terraform:init`, `terraform:fmt`, `terraform:validate`,
 and `terraform:plan`. The ECR root module uses the corresponding
 `terraform:ecr:*` tasks.
+
+Publish an API and worker development build using the current commit:
+
+```sh
+IMAGE_TAG="$(git rev-parse --short HEAD)" task ecr:publish
+```
+
+Official semantic image versions must match a Git tag pointing to the current
+commit. See the ECR publishing walkthrough for the release commands.
 
 ## What to notice
 
