@@ -4,12 +4,21 @@ vars:
   BIN_DIR: bin
   ECR_TF_DIR: infra/terraform/ecr
   TF_DIR: infra/terraform/network
+  AWS_PROFILE: '{{default "go-learning-lab" .AWS_PROFILE}}'
+  AWS_REGION: '{{default "eu-west-1" .AWS_REGION}}'
   IMAGE_TAG: '{{default "dev" .IMAGE_TAG}}'
+  IMAGE_PLATFORM: '{{default "linux/amd64" .IMAGE_PLATFORM}}'
   SOURCE_URL: '{{default "https://github.com/doryosi/go-learning-app" .SOURCE_URL}}'
   VCS_REVISION:
     sh: git rev-parse HEAD
   BUILD_DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  ECR_API_REPOSITORY:
+    sh: terraform -chdir={{.ECR_TF_DIR}} output -json repository_urls | jq -r .api
+  ECR_WORKER_REPOSITORY:
+    sh: terraform -chdir={{.ECR_TF_DIR}} output -json repository_urls | jq -r .worker
+  ECR_REGISTRY:
+    sh: terraform -chdir={{.ECR_TF_DIR}} output -json repository_urls | jq -r '.api | split("/")[0]'
 
 tasks:
   default:
@@ -116,6 +125,113 @@ tasks:
     cmds:
       - docker compose up --detach --force-recreate
     env: *image_environment
+
+  ecr:check:
+    internal: true
+    cmds:
+      - aws sts get-caller-identity --query 'Arn' --output text
+      - docker info >/dev/null
+      - test -n "{{.ECR_API_REPOSITORY}}"
+      - test -n "{{.ECR_WORKER_REPOSITORY}}"
+    env: &ecr_environment
+      AWS_PROFILE: "{{.AWS_PROFILE}}"
+      AWS_REGION: "{{.AWS_REGION}}"
+    preconditions:
+      - sh: command -v aws >/dev/null
+        msg: Install AWS CLI before publishing images.
+      - sh: command -v docker >/dev/null
+        msg: Install and start Docker before publishing images.
+      - sh: command -v jq >/dev/null
+        msg: Install jq so Task can read Terraform JSON outputs.
+      - sh: >-
+          image_tag="{{.IMAGE_TAG}}";
+          head_revision="$(git rev-parse HEAD)";
+          short_revision="$(git rev-parse --short HEAD)";
+          if echo "$image_tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            test "$(git rev-list -n 1 "$image_tag" 2>/dev/null)" = "$head_revision";
+          else
+            test "$image_tag" = "$short_revision";
+          fi
+        msg: IMAGE_TAG must be the current short commit or a semantic Git tag pointing to HEAD.
+      - sh: test -z "$(git status --porcelain -- Dockerfile go.mod cmd internal)"
+        msg: Commit Dockerfile and Go application changes before publishing an image.
+
+  ecr:login:
+    desc: Authenticate Docker to the Terraform-managed ECR registry
+    cmds:
+      - task: ecr:check
+      - aws ecr get-login-password --region {{.AWS_REGION}} | docker login --username AWS --password-stdin {{.ECR_REGISTRY}}
+    env: *ecr_environment
+
+  ecr:build:
+    desc: Build versioned API and worker images for the target platform
+    cmds:
+      - task: ecr:check
+      - >-
+        docker buildx build --load --platform {{.IMAGE_PLATFORM}} --target api
+        --tag go-learning-app-api:{{.IMAGE_TAG}}
+        --build-arg IMAGE_VERSION={{.IMAGE_TAG}}
+        --build-arg VCS_REVISION={{.VCS_REVISION}}
+        --build-arg BUILD_DATE={{.BUILD_DATE}}
+        --build-arg SOURCE_URL={{.SOURCE_URL}} .
+      - >-
+        docker buildx build --load --platform {{.IMAGE_PLATFORM}} --target worker
+        --tag go-learning-app-worker:{{.IMAGE_TAG}}
+        --build-arg IMAGE_VERSION={{.IMAGE_TAG}}
+        --build-arg VCS_REVISION={{.VCS_REVISION}}
+        --build-arg BUILD_DATE={{.BUILD_DATE}}
+        --build-arg SOURCE_URL={{.SOURCE_URL}} .
+    env: *ecr_environment
+
+  ecr:tag:
+    desc: Tag local versioned images with their ECR repository addresses
+    cmds:
+      - task: ecr:check
+      - docker image tag go-learning-app-api:{{.IMAGE_TAG}} {{.ECR_API_REPOSITORY}}:{{.IMAGE_TAG}}
+      - docker image tag go-learning-app-worker:{{.IMAGE_TAG}} {{.ECR_WORKER_REPOSITORY}}:{{.IMAGE_TAG}}
+    env: *ecr_environment
+
+  ecr:push:
+    desc: Push both versioned images to ECR
+    cmds:
+      - task: ecr:check
+      - docker image push {{.ECR_API_REPOSITORY}}:{{.IMAGE_TAG}}
+      - docker image push {{.ECR_WORKER_REPOSITORY}}:{{.IMAGE_TAG}}
+    env: *ecr_environment
+
+  ecr:verify:
+    desc: Verify ECR digests and local OCI Git revisions
+    cmds:
+      - task: ecr:check
+      - >-
+        test "$(docker image inspect {{.ECR_API_REPOSITORY}}:{{.IMAGE_TAG}}
+        | jq -r '.[0].Config.Labels["org.opencontainers.image.revision"]')" = "{{.VCS_REVISION}}"
+      - >-
+        test "$(docker image inspect {{.ECR_WORKER_REPOSITORY}}:{{.IMAGE_TAG}}
+        | jq -r '.[0].Config.Labels["org.opencontainers.image.revision"]')" = "{{.VCS_REVISION}}"
+      - >-
+        aws ecr describe-images --region {{.AWS_REGION}}
+        --repository-name "$(basename {{.ECR_API_REPOSITORY}})"
+        --image-ids imageTag={{.IMAGE_TAG}}
+        --query 'imageDetails[0].{digest:imageDigest,tags:imageTags,pushedAt:imagePushedAt,scanStatus:imageScanStatus.status}'
+        --output json
+      - >-
+        aws ecr describe-images --region {{.AWS_REGION}}
+        --repository-name "$(basename {{.ECR_WORKER_REPOSITORY}})"
+        --image-ids imageTag={{.IMAGE_TAG}}
+        --query 'imageDetails[0].{digest:imageDigest,tags:imageTags,pushedAt:imagePushedAt,scanStatus:imageScanStatus.status}'
+        --output json
+    env: *ecr_environment
+
+  ecr:publish:
+    desc: Login, build, tag, push, and verify both versioned ECR images
+    cmds:
+      - task: ecr:login
+      - task: ecr:build
+      - task: ecr:tag
+      - task: ecr:push
+      - task: ecr:verify
+    env: *ecr_environment
 
   terraform:fmt:
     desc: Format the Terraform network module

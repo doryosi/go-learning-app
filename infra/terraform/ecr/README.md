@@ -12,7 +12,8 @@ This Terraform root module creates the DOR-27 container registry foundation:
 
 The module manages registry infrastructure only. Docker builds, tags, login,
 and pushes belong to the DOR-26 Taskfile workflow and are intentionally absent
-from Terraform.
+from Terraform. See the
+[ECR publishing walkthrough](../../../docs/milestone-2-ecr-publishing.md).
 
 ## Why this is a separate root module
 
